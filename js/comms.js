@@ -244,7 +244,7 @@ const Comms = {
         }
       }
       // Use write with newline here so we wait for it to finish
-      let cmd = '\x10E.showMessage("Erasing...");require("Storage").eraseAll();Bluetooth.println("OK");reset()\n';
+      let cmd = '\x10E.showMessage("Erasing...");require("Storage").eraseAll();Bluetooth.println("OK");E.showMessage("Erased!");reset()\n';
       Puck.write(cmd, handleResult, true /* wait for newline */);
     });
   },
@@ -255,12 +255,18 @@ const Comms = {
     let cmd = '\x03\x10setTime('+(d.getTime()/1000)+');';
     // in 1v93 we have timezones too
     cmd += 'E.setTimeZone('+tz+');';
-    cmd += "(s=>{s&&(s.timezone="+tz+")&&require('Storage').write('setting.json',s);})(require('Storage').readJSON('setting.json',1))\n";
+    cmd += "(s=>{s&&(s.timezone="+tz+")&&require('Storage').write('setting.json',s);})(require('Storage').readJSON('setting.json',1));\n";
+    cmd += 'load();\n';
     return Comms.write(cmd);
   },
   // Reset the device
   resetDevice : () => {
     let cmd = "reset();load()\n";
+    return Comms.write(cmd);
+  },
+  // Reboot the device
+  rebootDevice : () => {
+    let cmd = "E.reboot()\n";
     return Comms.write(cmd);
   },
   // Force a disconnect from the device

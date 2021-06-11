@@ -726,6 +726,14 @@ if (btn) btn.addEventListener("click",event=>{
     showToast("Error resetting watch: "+err,"error");
   });
 });
+btn = document.getElementById("rebootwatch");
+if (btn) btn.addEventListener("click",event=>{
+  Comms.rebootDevice().then(()=>{
+    showToast("Rebooted watch successfully","success");
+  }, err=>{
+    showToast("Error rebooting watch: "+err,"error");
+  });
+});
 btn = document.getElementById("settime");
 if (btn) btn.addEventListener("click",event=>{
   Comms.setTime().then(()=>{

@@ -22,11 +22,44 @@ const Const = {
 
   /* The code to upload to the device show a progress bar on the screen (should define a fn. called 'p') */
   CODE_PROGRESSBAR : "g.drawRect(10,g.getHeight()-16,g.getWidth()-10,g.getHeight()-8).flip();p=x=>g.fillRect(10,g.getHeight()-16,10+(g.getWidth()-20)*x/100,g.getHeight()-8).flip();",
-
-  /* Icons to use in the UI for favourite (usually a heart) */
-  FAVOURITE_INACTIVE_ICON : "&#x2661;",
-  FAVOURITE_ACTIVE_ICON : "&#x2665;",
 };
+
+let DEVICEINFO = [
+  {
+    id : "BANGLEJS",
+    name : "Bangle.js 1",
+    features : ["BLE","BLEHID","GRAPHICS","ACCEL","MAG"],
+    g : { width : 240, height : 240, bpp : 16 },
+    img : "https://www.espruino.com/img/BANGLEJS_thumb.jpg"
+  }, {
+    id : "BANGLEJS2",
+    name : "Bangle.js 2",
+    features : ["BLE","BLEHID","GRAPHICS","ACCEL","MAG","PRESSURE","TOUCH"],
+    g : { width : 176, height : 176, bpp : 3 },
+    img : "https://www.espruino.com/img/BANGLEJS2_thumb.jpg"
+  }, {
+    id : "PUCKJS",
+    name : "Puck.js",
+    features : ["BLE","BLEHID","NFC","GYRO","ACCEL","MAG"],
+    img : "https://www.espruino.com/img/PUCKJS_thumb.jpg"
+  }, {
+    id : "PIXLJS",
+    name : "Pixl.js",
+    features : ["BLE","BLEHID","NFC","GRAPHICS"],
+    g : { width : 128, height : 64, bpp : 1 },
+    img : "https://www.espruino.com/img/PIXLJS_thumb.jpg"
+  }, {
+    id : "MDBT42Q",
+    name : "MDBT42Q",
+    features : ["BLE","BLEHID"],
+    img : "https://www.espruino.com/img/MDBT42Q_thumb.jpg"
+  }/*, {
+    id : "MICROBIT",
+    name : "micro:bit",
+    features : ["BLE","BLEHID"],
+    img : "https://www.espruino.com/img/MICROBIT_thumb.jpg"
+  }*/
+];
 
 function escapeHtml(text) {
   let map = {
@@ -122,8 +155,10 @@ function getVersionInfo(appListing, appInstalled) {
   } else {
     versionText = (appInstalled.version ? (clicky("v"+appInstalled.version)) : "Unknown version");
     if (appListing.version != appInstalled.version) {
-      if (appListing.version) versionText += ", latest "+clicky("v"+appListing.version);
-      canUpdate = true;
+      if (appListing.version) {
+        versionText += ", latest "+clicky("v"+appListing.version);
+        canUpdate = true;
+      }
     }
   }
   return {

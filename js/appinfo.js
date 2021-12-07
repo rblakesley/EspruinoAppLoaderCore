@@ -54,7 +54,7 @@ function parseJS(storageFile, options) {
       PRETOKENISE : options.settings.pretokenise,
       MODULE_URL : localModulesURL+"|https://www.espruino.com/modules",
       //MINIFICATION_LEVEL : "ESPRIMA", // disable due to https://github.com/espruino/BangleApps/pull/355#issuecomment-620124162
-      builtinModules : "Flash,Storage,heatshrink,tensorflow,locale,notify"
+      builtinModules : "Flash,Storage,heatshrink,tensorflow,locale,notify,crypto"
     }).then(content => {
       storageFile.content = content;
       return storageFile;
@@ -63,20 +63,31 @@ function parseJS(storageFile, options) {
     return Promise.resolve(storageFile);
 }
 
-const AppInfo = {
+var AppInfo = {
   /* Get files needed for app.
      options = {
         fileGetter : callback for getting URL,
         settings : global settings object
+        device : { id : ..., version : ... } info about the currently connected device
       }
       */
   getFiles : (app,options) => {
+    options = options||{};
     return new Promise((resolve,reject) => {
       // Load all files
-      const appFiles = [].concat(
+      var appFiles = [].concat(
         app.storage,
         app.data&&app.data.filter(f=>f.url||f.content).map(f=>(f.noOverwrite=true,f))||[]);
       //console.log(appFiles)
+      // does the app's file list have a 'supports' entry?
+      if (appFiles.some(file=>file.supports)) {
+        if (!options.device || !options.device.id)
+          return reject("App storage contains a 'supports' field, but no device ID found");
+        appFiles = appFiles.filter(file=>{
+          if (!file.supports) return true;
+          return file.supports.includes(options.device.id);
+        });
+      }
 
       Promise.all(appFiles.map(storageFile => {
         if (storageFile.content!==undefined)
@@ -153,6 +164,7 @@ const AppInfo = {
         json.icon = app.id+".img";
       if (app.sortorder) json.sortorder = app.sortorder;
       if (app.version) json.version = app.version;
+      if (app.tags) json.tags = app.tags;
       let fileList = fileContents.map(storageFile=>storageFile.name).filter(n=>n!="RAM");
       fileList.unshift(appInfoFileName); // do we want this? makes life easier!
       json.files = fileList.join(",");
@@ -184,7 +196,8 @@ const AppInfo = {
    */
   parseDataString(data) {
     data = data || '';
-    let [files = [], storage = []] = data.split(';').map(d => d.split(','))
+    let [files = [], storage = []] = data.split(';').map(d => d.split(','));
+    if (files.length==1 && files[0]=="") files = []; // hack for above code
     return {dataFiles: files, storageFiles: storage}
   },
   /**

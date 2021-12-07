@@ -52,11 +52,17 @@ const Comms = {
     });
   }),
   // Upload an app
-  uploadApp : (app,skipReset) => { // expects an apps.json structure (i.e. with `storage`)
+  uploadApp : (app,options) => {
+    options = options||{};
+    /* app : an apps.json structure (i.e. with `storage`)
+       options : { skipReset : bool, // don't reset first
+                   device : { id : ..., version : ... } info about the currently connected device
+       } */
     Progress.show({title:`Uploading ${app.name}`,sticky:true});
     return AppInfo.getFiles(app, {
       fileGetter : httpGet,
-      settings : SETTINGS
+      settings : SETTINGS,
+      device : options.device
     }).then(fileContents => {
       return new Promise((resolve,reject) => {
         console.log("<COMMS> uploadApp:",fileContents.map(f=>f.name).join(", "));
@@ -122,7 +128,7 @@ const Comms = {
               return reject("");
             });
         }
-        if (skipReset) {
+        if (options.skipReset) {
           doUpload();
         } else {
         // reset to ensure we have enough memory to upload what we need to
@@ -152,20 +158,22 @@ const Comms = {
           return;
         }
 
-        let cmd, finalJS = `E.toJS([process.env.BOARD,process.env.VERSION]).substr(1)`;
+        let cmd, finalJS = `E.toJS([process.env.BOARD,process.env.VERSION,0|getTime()]).substr(1)`;
         if (Const.SINGLE_APP_ONLY) // only one app on device, info file is in app.info
           cmd = `\x10Bluetooth.println("["+(require("Storage").read("app.info")||"null")+","+${finalJS})\n`;
         else
-          cmd = `\x10Bluetooth.print("[");require("Storage").list(/\\.info$/).forEach(f=>{var j=require("Storage").readJSON(f,1)||{};j.id=f.slice(0,-5);Bluetooth.print(JSON.stringify(j)+",")});Bluetooth.println(${finalJS})\n`;
+          cmd = `\x10Bluetooth.print("[");require("Storage").list(/\\.info$/).forEach(f=>{var j=require("Storage").readJSON(f,1)||{};Bluetooth.print(JSON.stringify({id:f.slice(0,-5),version:j.version,files:j.files,data:j.data})+",")});Bluetooth.println(${finalJS})\n`;
         Puck.write(cmd, (appListStr,err) => {
           Progress.hide({sticky:true});
           if (appListStr=="") {
             return reject("No response from device. Is 'Programmable' set to 'Off'?");
           }
           let info = {};
+          let appList;
           try {
             appList = JSON.parse(appListStr);
-            // unpack the last 2 elements which are board info
+            // unpack the last 3 elements which are board info (See finalJS above)
+            info.currentTime = appList.pop()*1000; // time in ms
             info.version = appList.pop();
             info.id = appList.pop();
             // if we just have 'null' then it means we have no apps
@@ -185,36 +193,59 @@ const Comms = {
       });
     });
   },
+  // Get an app's info file from Bangle.js
+  getAppInfo : app => {
+    return Comms.write(`\x10Bluetooth.println(require("Storage").read(${JSON.stringify(AppInfo.getAppInfoFilename(app))})||"null")\n`).
+      then(appJSON=>{
+      var app;
+        try {
+          app = JSON.parse(appJSON);
+        } catch (e) {
+          app = null;
+          console.log("<COMMS> ERROR Parsing JSON",e.toString());
+          console.log("<COMMS> Actual response: ",JSON.stringify(appListStr));
+          throw new Error("Invalid JSON");
+        }
+        return app;
+      });
+  },
   // Remove an app given an appinfo.id structure as JSON
-  removeApp : app => { // expects an appid.info structure (i.e. with `files`)
-    if (!app.files && !app.data) return Promise.resolve(); // nothing to erase
-    Progress.show({title:`Removing ${app.name}`,sticky:true});
-    let cmds = '\x10const s=require("Storage");\n';
-    // remove App files: regular files, exact names only
-    cmds += app.files.split(',').map(file => `\x10s.erase(${toJS(file)});\n`).join("");
-    // remove app Data: (dataFiles and storageFiles)
-    const data = AppInfo.parseDataString(app.data)
-    const isGlob = f => /[?*]/.test(f)
-    //   regular files, can use wildcards
-    cmds += data.dataFiles.map(file => {
-      if (!isGlob(file)) return `\x10s.erase(${toJS(file)});\n`;
-      const regex = new RegExp(globToRegex(file))
-      return `\x10s.list(${regex}).forEach(f=>s.erase(f));\n`;
-    }).join("");
-    //   storageFiles, can use wildcards
-    cmds += data.storageFiles.map(file => {
-      if (!isGlob(file)) return `\x10s.open(${toJS(file)},'r').erase();\n`;
-      // storageFiles have a chunk number appended to their real name
-      const regex = globToRegex(file+'\u0001')
-      // open() doesn't want the chunk number though
-      let cmd = `\x10s.list(${regex}).forEach(f=>s.open(f.substring(0,f.length-1),'r').erase());\n`
-      // using a literal \u0001 char fails (not sure why), so escape it
-      return cmd.replace('\u0001', '\\x01')
-    }).join("");
-    console.log("<COMMS> removeApp", cmds);
+  removeApp : (app, containsFileList) => {
+    // expects an appid.info structure with minimum app.id
+    // if containsFileList is true, don't get data from watch
+    Progress.show({title:`Removing ${app.id}`,sticky:true});
+    /* App Info now doesn't contain .files, so to erase, we need to
+    read the info file ourselves. */
     return Comms.reset().
       then(()=>Comms.showMessage(`Erasing\n${app.id}...`)).
-      then(()=>Comms.write(cmds)).
+      then(()=>containsFileList ? app : Comms.getAppInfo(app)).
+      then(app=>{
+        let cmds = '\x10const s=require("Storage");\n';
+        // remove App files: regular files, exact names only
+        cmds += app.files.split(',').filter(f=>f!="").map(file => `\x10s.erase(${toJS(file)});\n`).join("");
+        // remove app Data: (dataFiles and storageFiles)
+        const data = AppInfo.parseDataString(app.data)
+        const isGlob = f => /[?*]/.test(f)
+        //   regular files, can use wildcards
+        cmds += data.dataFiles.map(file => {
+          if (!isGlob(file)) return `\x10s.erase(${toJS(file)});\n`;
+          const regex = new RegExp(globToRegex(file))
+          return `\x10s.list(${regex}).forEach(f=>s.erase(f));\n`;
+        }).join("");
+        //   storageFiles, can use wildcards
+        cmds += data.storageFiles.map(file => {
+          if (!isGlob(file)) return `\x10s.open(${toJS(file)},'r').erase();\n`;
+          // storageFiles have a chunk number appended to their real name
+          const regex = globToRegex(file+'\u0001')
+          // open() doesn't want the chunk number though
+          let cmd = `\x10s.list(${regex}).forEach(f=>s.open(f.substring(0,f.length-1),'r').erase());\n`
+          // using a literal \u0001 char fails (not sure why), so escape it
+          return cmd.replace('\u0001', '\\x01')
+        }).join("");
+        console.log("<COMMS> removeApp", cmds);
+
+        return Comms.write(cmds)
+      }).
       then(()=>Comms.showUploadFinished()).
       then(()=>Progress.hide({sticky:true})).
       catch(function(reason) {
@@ -246,18 +277,25 @@ const Comms = {
       // Use write with newline here so we wait for it to finish
       let cmd = '\x10E.showMessage("Erasing...");require("Storage").eraseAll();Bluetooth.println("OK");E.showMessage("Erased!");reset()\n';
       Puck.write(cmd, handleResult, true /* wait for newline */);
-    });
+    }).then(() => new Promise(resolve => {
+      console.log("<COMMS> removeAllApps: Erase complete, waiting 500ms for 'reset()'");
+      setTimeout(resolve, 500);
+    })); // now wait a second for the reset to complete
   },
   // Set the time on the device
   setTime : () => {
-    let d = new Date();
-    let tz = d.getTimezoneOffset()/-60
-    let cmd = '\x03\x10setTime('+(d.getTime()/1000)+');';
-    // in 1v93 we have timezones too
-    cmd += 'E.setTimeZone('+tz+');';
-    cmd += "(settings=>{settings&&(settings.timezone="+tz+")&&require('Storage').write('setting.json',settings);})(require('Storage').readJSON('setting.json',1));\n";
-    cmd += 'load();\n';
-    return Comms.write(cmd);
+    /* connect FIRST, then work out the time - otherwise
+    we end up with a delay dependent on how long it took
+    to open the device chooser. */
+    return Comms.write("\x03").then(() => {
+      let d = new Date();
+      let tz = d.getTimezoneOffset()/-60
+      let cmd = '\x10setTime('+(d.getTime()/1000)+');';
+      // in 1v93 we have timezones too
+      cmd += 'E.setTimeZone('+tz+');';
+      cmd += "(settings=>{settings&&(settings.timezone="+tz+")&&require('Storage').write('setting.json',settings);})(require('Storage').readJSON('setting.json',1))\n";
+      Comms.write(cmd);
+    });
   },
   // Reset the device
   resetDevice : () => {

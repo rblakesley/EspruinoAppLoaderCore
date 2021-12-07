@@ -255,7 +255,7 @@ const Comms = {
     let cmd = '\x03\x10setTime('+(d.getTime()/1000)+');';
     // in 1v93 we have timezones too
     cmd += 'E.setTimeZone('+tz+');';
-    cmd += "(s=>{s&&(s.timezone="+tz+")&&require('Storage').write('setting.json',s);})(require('Storage').readJSON('setting.json',1));\n";
+    cmd += "(settings=>{settings&&(settings.timezone="+tz+")&&require('Storage').write('setting.json',settings);})(require('Storage').readJSON('setting.json',1));\n";
     cmd += 'load();\n';
     return Comms.write(cmd);
   },

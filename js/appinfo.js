@@ -37,6 +37,9 @@ function toJS(txt) {
       if (cs.length*4 < js.length*3)
         js = cs;
     }
+    else {
+      console.log('Error processing '+txt);
+    }
   }
 
   return js;

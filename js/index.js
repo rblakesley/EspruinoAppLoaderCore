@@ -811,7 +811,6 @@ function settingsCheckbox(id, name) {
   });
 }
 settingsCheckbox("settings-pretokenise", "pretokenise");
-settingsCheckbox("settings-settime", "settime");
 loadSettings();
 
 let btn;
@@ -840,6 +839,14 @@ if (btn) btn.addEventListener("click",event=>{
     showToast("Error rebooting watch: "+err,"error");
   });
 });
+btn = document.getElementById("showerrors");
+if (btn) btn.addEventListener("click",event=>{
+  Comms.getUncaughtErrors().then(a=>{
+    showPrompt("Unhandled errors",a,{ok:1},true);
+  }, err =>{
+    showToast("Failed to read uncaught errors: "+err,"error");
+  });
+});
 btn = document.getElementById("settime");
 if (btn) btn.addEventListener("click",event=>{
   Comms.setTime().then(()=>{
@@ -860,6 +867,14 @@ if (btn) btn.addEventListener("click",event=>{
   }).catch(err=>{
     Progress.hide({sticky:true});
     showToast("App removal failed, "+err,"error");
+  });
+});
+btn = document.getElementById("enableancs");
+if (btn) btn.addEventListener("click",event=>{
+  Comms.enableANCS().then(()=>{
+    showToast("Enabled iOS notifications and music control","success");
+  }, err=>{
+    showToast("Error enabling iOS notifications, "+err,"error");
   });
 });
 

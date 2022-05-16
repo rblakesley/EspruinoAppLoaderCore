@@ -297,6 +297,14 @@ const Comms = {
       Comms.write(cmd);
     });
   },
+  // Enable ANCS (and AMS) on the device
+  enableANCS : () => {
+    return Comms.write("\x03").then(() => {
+      let cmd = '\x10settings.ANCS=true;settings.AMS=true;require("Storage").write("setting.json", settings);\n';
+      cmd += "NRF.setServices({},{ancs:true,ams:true,uart:true});\n";
+      Comms.write(cmd);
+    });
+  },
   // Reset the device
   resetDevice : () => {
     let cmd = "reset();load()\n";
@@ -306,6 +314,11 @@ const Comms = {
   rebootDevice : () => {
     let cmd = "E.reboot()\n";
     return Comms.write(cmd);
+  },
+  // Get the device's log of uncaught errors
+  getUncaughtErrors : () => {
+    Comms.write("\x10\n"); // Make sure we're connected
+    return Comms.readStorageFile('uncaughtexceptions.txt');
   },
   // Force a disconnect from the device
   disconnectDevice: () => {
